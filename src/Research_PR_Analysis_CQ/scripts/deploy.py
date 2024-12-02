@@ -31,19 +31,26 @@ scaler = load("models/improved_scaler.pkl")
 
 
 @app.get("/")
-def redirect_to_login():
+def redirect_to_login(repo_name: str = None):
     """
-    Automatically redirect the root URL (/) to the /login endpoint.
+    Redirect to the /login endpoint. Optionally include a `repo_name` in the query parameters.
     """
+    if repo_name:
+        return RedirectResponse(url=f"/login?repo_name={repo_name}")
     return RedirectResponse(url="/login")
 
 
+
 @app.get("/login")
-def login():
+def login(repo_name: str = Query(None)):
     """
     Redirect users to GitHub's OAuth2 login page.
+    If a `repo_name` is provided, include it in the callback URL.
     """
     redirect_uri = "http://127.0.0.1:8000/callback"
+    if repo_name:
+        redirect_uri = f"{redirect_uri}?repo_name={repo_name}"
+
     github_auth_url = (
         f"{GITHUB_AUTHORIZE_URL}?client_id={GITHUB_CLIENT_ID}"
         f"&redirect_uri={redirect_uri}&scope=repo"
@@ -51,11 +58,12 @@ def login():
     return RedirectResponse(github_auth_url)
 
 
+
 @app.get("/callback")
-def callback(code: str = Query(...)):
+def callback(code: str = Query(...), repo_name: str = Query(None)):
     """
     Handle the GitHub OAuth2 callback, exchange the code for an access token,
-    store the user details, and analyze repositories.
+    store the user details, and analyze repositories or a specific repository.
     """
     token_request = requests.post(
         GITHUB_ACCESS_TOKEN_URL,
@@ -80,16 +88,24 @@ def callback(code: str = Query(...)):
         "repos": get_user_repositories(access_token)
     }
 
-    # Analyze repositories immediately after login
     try:
-        analysis_results = analyze_repositories(user["login"])
+        # Decide which analysis to perform
+        if repo_name:
+            logger.info(f"Analyzing specific repository: {repo_name} for user: {user['login']}")
+            analysis_results = analyze_single_repo(user["login"], repo_name)
+        else:
+            logger.info(f"Analyzing all repositories for user: {user['login']}")
+            analysis_results = analyze_all_repositories(user["login"])
+
     except Exception as e:
+        logger.error(f"Error during analysis: {e}")
         raise HTTPException(status_code=400, detail=f"Error analyzing repositories: {str(e)}")
 
     return {
-        "message": f"Welcome, {user['login']}! Repositories analyzed successfully.",
+        "message": f"Welcome, {user['login']}! Analysis completed successfully.",
         "analysis_results": analysis_results
     }
+
 
 
 
@@ -123,8 +139,8 @@ def get_user_repositories(access_token):
 
 
 # Example of calling the function
-@app.get("/analyze_repos")
-def analyze_repositories(username: str):
+@app.get("/analyze_all_repos")
+def analyze_all_repositories(username: str):
     """
     Analyze all pull requests (PRs) in repositories for the logged-in user and predict code quality.
     """
@@ -173,7 +189,7 @@ def analyze_repositories(username: str):
                     unsupported_files = []
 
                     for file in pr_files:
-                        if file.filename.endswith((".py", ".js" , ".ts" , ".tsx" , ".java" , ".cs" , ".html" , ".css" , "jsx" )):
+                        if file.filename.endswith((".py", ".js" , ".ts" , ".tsx" , ".java" , ".cs" , ".html" , ".css" , ".jsx" )):
                             logger.debug(f"Analyzing file in PR: {file.filename}")
                             try:
                                 # Fetch file content from the PR
@@ -221,6 +237,102 @@ def analyze_repositories(username: str):
     except Exception as e:
         logger.error(f"Error analyzing repositories for user {username}: {e}")
         raise HTTPException(status_code=400, detail=f"Error analyzing repositories: {str(e)}")
+    
+
+
+
+@app.get("/analyze_single_repo")
+def analyze_single_repo(username: str, repo_name: str = Query(None)):
+    """
+    Analyze pull requests in a specific repository for the logged-in user.
+    Redirect to `/login` if the user is not authenticated and a `repo_name` is provided.
+    """
+    logger.info(f"Starting analysis for user: {username}, repository: {repo_name if repo_name else 'All Repositories'}")
+
+    # Check if user is authenticated
+    if username not in user_tokens:
+        logger.error("User not authenticated")
+        if repo_name:
+            logger.info(f"Redirecting to login to analyze specific repository: {repo_name}")
+            return RedirectResponse(url=f"/login?repo_name={repo_name}")
+        raise HTTPException(status_code=403, detail="User not authenticated")
+
+    if not repo_name:
+        logger.error("No repository name provided")
+        raise HTTPException(status_code=400, detail="Repository name is required")
+
+    access_token = user_tokens[username]["access_token"]
+    github = Github(access_token)
+
+    try:
+        # Fetch the repository for analysis
+        repos = user_tokens[username]["repos"]
+        matching_repo = next((repo for repo in repos if repo["full_name"] == repo_name), None)
+        if not matching_repo:
+            logger.warning(f"Repository {repo_name} not found for user: {username}")
+            raise HTTPException(status_code=404, detail=f"Repository {repo_name} not found for user: {username}")
+
+        logger.info(f"Analyzing repository: {repo_name}")
+        repo = github.get_repo(repo_name)
+        pull_requests = repo.get_pulls(state="all")
+
+        pr_results = []
+        if pull_requests.totalCount == 0:
+            logger.info(f"No pull requests found for repository: {repo_name}")
+            return {"repo_name": repo_name, "pull_requests": "No pull requests found."}
+
+        logger.info(f"Found {pull_requests.totalCount} pull requests in repository: {repo_name}")
+        for pr in pull_requests:
+            logger.info(f"Analyzing PR #{pr.number}: {pr.title}")
+
+            pr_files = pr.get_files()
+            code_metrics = []
+            unsupported_files = []
+
+            for file in pr_files:
+                if file.filename.endswith((".py", ".js", ".ts", ".tsx", ".java", ".cs", ".html", ".css", ".jsx")):
+                    logger.debug(f"Analyzing file in PR: {file.filename}")
+                    try:
+                        content = fetch_file_content(repo.get_contents(file.filename))
+                        if content:
+                            metrics = extract_metrics_from_code(content)
+                            logger.info(f"Extracted metrics for file: {file.filename}")
+                            code_metrics.append(metrics)
+                    except Exception as file_error:
+                        logger.error(f"Error analyzing file {file.filename} in PR #{pr.number}: {file_error}")
+                else:
+                    logger.warning(f"Unsupported file type in PR #{pr.number}: {file.filename}")
+                    unsupported_files.append(file.filename)
+
+            pr_result = {
+                "pr_number": pr.number,
+                "title": pr.title,
+                "unsupported_files": unsupported_files,
+            }
+
+            if code_metrics:
+                aggregated_metrics = aggregate_metrics(code_metrics)
+                logger.info(f"Aggregated metrics for PR #{pr.number}: {aggregated_metrics}")
+
+                input_features = np.array([list(aggregated_metrics.values())])
+                scaled_features = scaler.transform(input_features)
+                prediction = model.predict(scaled_features)
+                quality = "Good" if prediction[0] == 1 else "Bad"
+
+                logger.info(f"Prediction for PR #{pr.number} in repository {repo_name}: {quality}")
+                pr_result["quality"] = quality
+                pr_result["metrics"] = aggregated_metrics
+            else:
+                pr_result["quality"] = "No analysis (unsupported files only)"
+
+            pr_results.append(pr_result)
+
+        return {"repo_name": repo_name, "pull_requests": pr_results}
+
+    except Exception as repo_error:
+        logger.error(f"Error analyzing repository {repo_name}: {repo_error}")
+        raise HTTPException(status_code=400, detail=f"Error analyzing repository {repo_name}: {str(repo_error)}")
+
 
 
 
