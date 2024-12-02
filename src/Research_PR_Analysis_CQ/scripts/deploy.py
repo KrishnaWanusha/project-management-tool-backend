@@ -126,7 +126,7 @@ def get_user_repositories(access_token):
 @app.get("/analyze_repos")
 def analyze_repositories(username: str):
     """
-    Analyze repositories for the logged-in user and predict code quality.
+    Analyze all pull requests (PRs) in repositories for the logged-in user and predict code quality.
     """
     logger.info(f"Starting analysis for user: {username}")
 
@@ -152,33 +152,71 @@ def analyze_repositories(username: str):
 
             try:
                 repo = github.get_repo(repo_name)
-                contents = _get_repository_contents(repo)
-                logger.info(f"Fetched {len(contents)} files from repository: {repo_name}")
+                pull_requests = repo.get_pulls(state="all")
+                pr_results = []
 
-                code_metrics = []
-                for content in contents:
-                    logger.debug(f"Analyzing file: {content.path}")
-                    metrics = extract_metrics_from_code(content.decoded_content.decode())
-                    logger.info(f"Extracted metrics for file: {content.path}")
-                    code_metrics.append(metrics)
+                if pull_requests.totalCount == 0:
+                    logger.info(f"No pull requests found for repository: {repo_name}")
+                    results.append({
+                        "repo_name": repo_name,
+                        "pull_requests": "No pull requests found."
+                    })
+                    continue
 
-                if code_metrics:
-                    aggregated_metrics = aggregate_metrics(code_metrics)
-                    logger.info(f"Aggregated metrics for repository: {repo_name}")
+                logger.info(f"Found {pull_requests.totalCount} pull requests in repository: {repo_name}")
 
-                    input_features = np.array([list(aggregated_metrics.values())])
-                    scaled_features = scaler.transform(input_features)
-                    prediction = model.predict(scaled_features)
-                    quality = "Good" if prediction[0] == 1 else "Bad"
+                for pr in pull_requests:
+                    logger.info(f"Analyzing PR #{pr.number}: {pr.title}")
 
-                    logger.info(f"Prediction for repository {repo_name}: {quality}")
-                    results.append({"repo_name": repo_name, "quality": quality, "metrics": aggregated_metrics})
+                    pr_files = pr.get_files()
+                    code_metrics = []
+                    unsupported_files = []
+
+                    for file in pr_files:
+                        if file.filename.endswith((".py", ".js" , ".ts" , ".tsx" , ".java" , ".cs" , ".html" , ".css" , "jsx" )):
+                            logger.debug(f"Analyzing file in PR: {file.filename}")
+                            try:
+                                # Fetch file content from the PR
+                                content = repo.get_contents(file.filename).decoded_content.decode()
+                                metrics = extract_metrics_from_code(content)
+                                logger.info(f"Extracted metrics for file: {file.filename}")
+                                code_metrics.append(metrics)
+                            except Exception as file_error:
+                                logger.error(f"Error analyzing file {file.filename} in PR #{pr.number}: {file_error}")
+                        else:
+                            logger.warning(f"Unsupported file type in PR #{pr.number}: {file.filename}")
+                            unsupported_files.append(file.filename)
+
+                    pr_result = {
+                        "pr_number": pr.number,
+                        "title": pr.title,
+                        "unsupported_files": unsupported_files,
+                    }
+
+                    if code_metrics:
+                        aggregated_metrics = aggregate_metrics(code_metrics)
+                        logger.info(f"Aggregated metrics for PR #{pr.number}: {aggregated_metrics}")
+
+                        input_features = np.array([list(aggregated_metrics.values())])
+                        scaled_features = scaler.transform(input_features)
+                        prediction = model.predict(scaled_features)
+                        quality = "Good" if prediction[0] == 1 else "Bad"
+
+                        logger.info(f"Prediction for PR #{pr.number} in repository {repo_name}: {quality}")
+                        pr_result["quality"] = quality
+                        pr_result["metrics"] = aggregated_metrics
+                    else:
+                        pr_result["quality"] = "No analysis (unsupported files only)"
+
+                    pr_results.append(pr_result)
+
+                results.append({"repo_name": repo_name, "pull_requests": pr_results})
 
             except Exception as repo_error:
                 logger.error(f"Error analyzing repository {repo_name}: {repo_error}")
 
         logger.info(f"Completed analysis for user: {username}")
-        return {"username": username, "results": results}
+        return {"username": username, "repositories": results}
 
     except Exception as e:
         logger.error(f"Error analyzing repositories for user {username}: {e}")
@@ -189,47 +227,56 @@ def analyze_repositories(username: str):
 
 
 
-def _get_repository_contents(repo, path=""):
-    """
-    Recursively fetch only .py and .js files in the repository, excluding public system-generated files.
-    """
-    try:
-        logger.debug(f"Fetching contents for repo {repo.full_name}, path: {path}")
-        contents = repo.get_contents(path)
-        filtered_files = []
 
-        # Define patterns or filenames to exclude
-        excluded_files = {
-            "README.md", "LICENSE", ".gitignore", "package-lock.json", "yarn.lock", "Dockerfile",
-            ".github/", "__init__.py", "build/", "dist/", ".env", ".vscode/", "node_modules/" , "public/"
-        }
 
-        for content in contents:
-            # Skip directories or files matching the excluded patterns
-            if content.type == "dir":
-                if any(excluded in content.path for excluded in excluded_files):
-                    logger.debug(f"Skipping excluded directory: {content.path}")
-                    continue
-                logger.debug(f"Entering directory: {content.path}")
-                filtered_files.extend(_get_repository_contents(repo, content.path))
-            elif content.path.endswith((".py", ".js")) and content.size < 1_000_000:
-                if any(excluded in content.path for excluded in excluded_files):
-                    logger.debug(f"Skipping excluded file: {content.path}")
-                    continue
-                logger.debug(f"Adding file: {content.path}")
-                filtered_files.append(content)
+# def _get_repository_contents(repo, path=""):
+#     """
+#     Recursively fetch only .py and .js files in the repository, excluding public system-generated files
+#     and specified formats like .png and .xml.
+#     """
+#     try:
+#         logger.debug(f"Fetching contents for repo {repo.full_name}, path: {path}")
+#         contents = repo.get_contents(path)
+#         filtered_files = []
 
-        return filtered_files
-    except Exception as e:
-        logger.error(f"Error fetching contents for repo {repo.full_name}, path {path}: {e}")
-        return []
+#         # Define patterns or filenames to exclude
+#         excluded_files = {
+#             "README.md", "LICENSE", ".gitignore", "package-lock.json", "yarn.lock", "Dockerfile",
+#             ".github/", "__init__.py", "build/", "dist/", ".env", ".vscode/", "node_modules/", "public/"
+#         }
+
+#         for content in contents:
+#             # Skip directories or files matching the excluded patterns
+#             if content.type == "dir":
+#                 if any(excluded in content.path for excluded in excluded_files):
+#                     logger.debug(f"Skipping excluded directory: {content.path}")
+#                     continue
+#                 logger.debug(f"Entering directory: {content.path}")
+#                 filtered_files.extend(_get_repository_contents(repo, content.path))
+#             elif content.path.endswith((".py", ".js" , ".tsx" , ".java" , ".cs")) and not content.path.endswith((".png", ".xml")) and content.size < 1_000_000:
+#                 if any(excluded in content.path for excluded in excluded_files):
+#                     logger.debug(f"Skipping excluded file: {content.path}")
+#                     continue
+#                 logger.debug(f"Adding file: {content.path}")
+#                 filtered_files.append(content)
+#             else:
+#                 logger.debug(f"Skipping file with unsupported format: {content.path}")
+
+#         return filtered_files
+#     except Exception as e:
+#         logger.error(f"Error fetching contents for repo {repo.full_name}, path {path}: {e}")
+#         return []
+
 
 
 
 def extract_metrics_from_code(code):
     """
     Extract metrics from a code file dynamically based on its content.
+    All numeric return values are rounded to two decimal places.
     """
+    import re  # Import required module
+
     # Count lines of code (loc)
     loc = len(code.splitlines())
 
@@ -289,8 +336,8 @@ def extract_metrics_from_code(code):
     # Maximum nested blocks
     max_nested_blocks_qty = len(re.findall(r'{|}', code)) // 2  # Basic block depth approximation
 
-    # Return the dynamic metrics
-    return {
+    # Create the metrics dictionary with rounded values
+    metrics = {
         "cbo": cbo,
         "cboModified": cbo_modified,
         "fanin": fanin,
@@ -314,6 +361,11 @@ def extract_metrics_from_code(code):
         "variablesQty": variables_qty,
         "maxNestedBlocksQty": max_nested_blocks_qty
     }
+
+    # Round all values to 2 decimal places
+    rounded_metrics = {key: round(value, 2) if isinstance(value, float) else value for key, value in metrics.items()}
+
+    return rounded_metrics
 
 
 def fetch_file_content(file):
@@ -348,14 +400,20 @@ def fetch_file_content(file):
 def aggregate_metrics(metrics_list):
     """
     Aggregate metrics across all code files in a repository.
+    Ensure all values are rounded to two decimal places.
     """
+    if not metrics_list:
+        return {}
+
+    # Initialize the aggregated dictionary
     aggregated = {key: 0 for key in metrics_list[0]}
+
+    # Sum up all the metrics
     for metrics in metrics_list:
         for key, value in metrics.items():
             aggregated[key] += value
 
-    # Average the metrics
-    for key in aggregated:
-        aggregated[key] /= len(metrics_list)
+    # Calculate the average and round to two decimal places
+    aggregated = {key: round(value / len(metrics_list), 2) for key, value in aggregated.items()}
 
     return aggregated
