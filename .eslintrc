@@ -28,6 +28,7 @@
             "semi": false
           }
         ],
+        "lines-between-class-members": ["no", "always", { "exceptAfterSingleLine": true }],
         "import/order": [
           "error",
           {
@@ -53,17 +54,11 @@
         "no-nested-ternary": "off",
         "no-case-declarations": "off",
         "unused-imports/no-unused-imports": "error",
-        "unused-imports/no-unused-vars": [
-          "error",
-          { "argsIgnorePattern": "^_" }
-        ],
+        "unused-imports/no-unused-vars": ["error", { "argsIgnorePattern": "^_" }],
         "max-classes-per-file": "off",
         "comma-dangle": "off",
         "no-underscore-dangle": "off",
-        "import/no-extraneous-dependencies": [
-          "error",
-          { "devDependencies": true }
-        ]
+        "import/no-extraneous-dependencies": ["error", { "devDependencies": true }]
       }
     }
   ]
