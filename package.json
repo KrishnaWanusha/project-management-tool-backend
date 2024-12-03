@@ -36,8 +36,9 @@
     "typescript": "^5.4.2"
   },
   "dependencies": {
-    "@typegoose/auto-increment": "^1.2.0",
-    "@typegoose/typegoose": "^9.13.2",
+    "@octokit/rest": "^18.12.0",
+    "@typegoose/auto-increment": "^4.8.0",
+    "@typegoose/typegoose": "^12.9.1",
     "bcrypt": "^5.1.1",
     "class-validator": "^0.14.1",
     "cors": "^2.8.5",

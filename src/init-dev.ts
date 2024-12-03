@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import express, { NextFunction, Request, Response } from 'express'
 
 import authRouter from './api/auth/index.router'
+import projectRouter from './api/project/index.router'
 import { connectDB } from './config/db'
 
 dotenv.config()
@@ -27,6 +28,7 @@ app.get('/', (_, res) =>
 )
 
 app.use('/auth', authRouter)
+app.use('/project', projectRouter)
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.log(err)
