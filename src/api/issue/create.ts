@@ -1,6 +1,6 @@
 import { HttpStatus } from '@helpers/errorHandler'
 import { Request, Response, RequestHandler, NextFunction } from 'express'
-import createGitHubIssue from './github'
+import { createGitHubIssue } from './github'
 
 type Issue = {
   title: string
