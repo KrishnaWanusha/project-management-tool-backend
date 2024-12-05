@@ -1,8 +1,12 @@
 import express from 'express'
-import createIssue from './createIssue'
+import createProject from './createProject'
+import getAllProjects from './search'
+import getProject from './get'
 
 const projectRouter = express.Router()
 
-projectRouter.post('/issues/create', createIssue)
+projectRouter.post('/create', createProject)
+projectRouter.get('/search', getAllProjects)
+projectRouter.get('/get/:id', getProject)
 
 export default projectRouter
