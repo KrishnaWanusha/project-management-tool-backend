@@ -35,6 +35,6 @@ export const errorHandler = (error: Error, _req: Request, res: Response) => {
   if (error instanceof AppError) {
     res.status(error.statusCode).json({ error: error.message })
   } else {
-    res.status(500).json({ error: 'Internal Server Error' })
+    res.status(500).json({ error: 'Internal Server Error', message: error.message })
   }
 }
