@@ -26,7 +26,7 @@ app = FastAPI()
 user_tokens = {}
 
 # Load the ML model and scaler
-model = load("models/improved_code_quality_model.pkl")
+model = load("models/improved_xgb_model.pkl")
 scaler = load("models/improved_scaler.pkl")
 
 
@@ -142,7 +142,8 @@ def get_user_repositories(access_token):
 @app.get("/analyze_all_repos")
 def analyze_all_repositories(username: str):
     """
-    Analyze all pull requests (PRs) in repositories for the logged-in user and predict code quality.
+    Analyze all pull requests (PRs) in repositories for the logged-in user.
+    Returns a percentage-based quality score and ML model prediction.
     """
     logger.info(f"Starting analysis for user: {username}")
 
@@ -189,10 +190,9 @@ def analyze_all_repositories(username: str):
                     unsupported_files = []
 
                     for file in pr_files:
-                        if file.filename.endswith((".py", ".js" , ".ts" , ".tsx" , ".java" , ".cs" , ".html" , ".css" , ".jsx" )):
+                        if file.filename.endswith((".py", ".js", ".ts", ".tsx", ".java", ".cs", ".html", ".css", ".jsx")):
                             logger.debug(f"Analyzing file in PR: {file.filename}")
                             try:
-                                # Fetch file content from the PR
                                 content = repo.get_contents(file.filename).decoded_content.decode()
                                 metrics = extract_metrics_from_code(content)
                                 logger.info(f"Extracted metrics for file: {file.filename}")
@@ -213,16 +213,25 @@ def analyze_all_repositories(username: str):
                         aggregated_metrics = aggregate_metrics(code_metrics)
                         logger.info(f"Aggregated metrics for PR #{pr.number}: {aggregated_metrics}")
 
+                        # **Compute Quality Score**
+                        quality_percentage = compute_quality_score(aggregated_metrics)
+
+                        # **Call Model for Prediction**
                         input_features = np.array([list(aggregated_metrics.values())])
                         scaled_features = scaler.transform(input_features)
                         prediction = model.predict(scaled_features)
-                        quality = "Good" if prediction[0] == 1 else "Bad"
+                        quality_label = "Good" if prediction[0] == 1 else "Bad"
 
-                        logger.info(f"Prediction for PR #{pr.number} in repository {repo_name}: {quality}")
-                        pr_result["quality"] = quality
+                        logger.info(f"Code Quality Score for PR #{pr.number} in repository {repo_name}: {quality_percentage}%")
+                        logger.info(f"ML Model Prediction for PR #{pr.number} in repository {repo_name}: {quality_label}")
+
+                        # Add results to PR analysis
+                        pr_result["quality_score"] = quality_percentage
+                        pr_result["ml_prediction"] = quality_label  # From the ML model
                         pr_result["metrics"] = aggregated_metrics
                     else:
-                        pr_result["quality"] = "No analysis (unsupported files only)"
+                        pr_result["quality_score"] = "No analysis (unsupported files only)"
+                        pr_result["ml_prediction"] = "No analysis"
 
                     pr_results.append(pr_result)
 
@@ -237,6 +246,7 @@ def analyze_all_repositories(username: str):
     except Exception as e:
         logger.error(f"Error analyzing repositories for user {username}: {e}")
         raise HTTPException(status_code=400, detail=f"Error analyzing repositories: {str(e)}")
+
     
 
 
@@ -246,6 +256,7 @@ def analyze_single_repo(username: str, repo_name: str = Query(None)):
     """
     Analyze pull requests in a specific repository for the logged-in user.
     Redirect to `/login` if the user is not authenticated and a `repo_name` is provided.
+    Returns a percentage score and ML model prediction for code quality.
     """
     logger.info(f"Starting analysis for user: {username}, repository: {repo_name if repo_name else 'All Repositories'}")
 
@@ -314,16 +325,25 @@ def analyze_single_repo(username: str, repo_name: str = Query(None)):
                 aggregated_metrics = aggregate_metrics(code_metrics)
                 logger.info(f"Aggregated metrics for PR #{pr.number}: {aggregated_metrics}")
 
+                # **Compute Quality Score**
+                quality_percentage = compute_quality_score(aggregated_metrics)
+
+                # **Call Model for Prediction**
                 input_features = np.array([list(aggregated_metrics.values())])
                 scaled_features = scaler.transform(input_features)
                 prediction = model.predict(scaled_features)
-                quality = "Good" if prediction[0] == 1 else "Bad"
+                quality_label = "Good" if prediction[0] == 1 else "Bad"
 
-                logger.info(f"Prediction for PR #{pr.number} in repository {repo_name}: {quality}")
-                pr_result["quality"] = quality
+                logger.info(f"Code Quality Score for PR #{pr.number} in repository {repo_name}: {quality_percentage}%")
+                logger.info(f"ML Model Prediction for PR #{pr.number} in repository {repo_name}: {quality_label}")
+
+                # Add results to PR analysis
+                pr_result["quality_score"] = quality_percentage
+                pr_result["ml_prediction"] = quality_label  # From the ML model
                 pr_result["metrics"] = aggregated_metrics
             else:
-                pr_result["quality"] = "No analysis (unsupported files only)"
+                pr_result["quality_score"] = "No analysis (unsupported files only)"
+                pr_result["ml_prediction"] = "No analysis"
 
             pr_results.append(pr_result)
 
@@ -333,6 +353,53 @@ def analyze_single_repo(username: str, repo_name: str = Query(None)):
         logger.error(f"Error analyzing repository {repo_name}: {repo_error}")
         raise HTTPException(status_code=400, detail=f"Error analyzing repository {repo_name}: {str(repo_error)}")
 
+def compute_quality_score(metrics):
+    """
+    Compute a quality score (percentage) based on the extracted code metrics.
+    """
+
+    # Define maximum reasonable thresholds for each metric
+    thresholds = {
+        "cbo": 10,  # Coupling Between Objects
+        "wmc": 30,  # Weighted Methods per Class
+        "dit": 5,   # Depth of Inheritance Tree
+        "rfc": 50,  # Response For Class
+        "lcom": 1,  # Lack of Cohesion of Methods
+        "tcc": 1,   # Tight Class Cohesion
+        "loc": 500, # Lines of Code
+        "returnQty": 10,
+        "loopQty": 5,
+        "comparisonsQty": 20,
+        "tryCatchQty": 5,
+        "stringLiteralsQty": 30,
+        "numbersQty": 30,
+        "assignmentsQty": 20,
+        "mathOperationsQty": 15,
+        "variablesQty": 50,
+        "maxNestedBlocksQty": 5,
+    }
+
+    # Assign weight factors (higher weight means more impact on score)
+    weights = {
+        "cbo": 0.1, "wmc": 0.1, "dit": 0.05, "rfc": 0.1,
+        "lcom": 0.1, "tcc": 0.1, "loc": 0.1, "returnQty": 0.05,
+        "loopQty": 0.05, "comparisonsQty": 0.05, "tryCatchQty": 0.05,
+        "stringLiteralsQty": 0.05, "numbersQty": 0.05, "assignmentsQty": 0.05,
+        "mathOperationsQty": 0.05, "variablesQty": 0.05, "maxNestedBlocksQty": 0.05,
+    }
+
+    # Compute normalized scores for each metric
+    scores = []
+    for key, value in metrics.items():
+        if key in thresholds:
+            normalized_value = min(value / thresholds[key], 1)  # Normalize to 0-1 range
+            weighted_value = (1 - normalized_value) * weights[key]  # Higher is better
+            scores.append(weighted_value)
+
+    # Final quality score (convert to percentage)
+    quality_score = sum(scores) * 100 / sum(weights.values())
+
+    return round(quality_score, 2)
 
 
 

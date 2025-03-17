@@ -23,15 +23,18 @@ def main():
     # Handle class imbalance
     X_resampled, y_resampled = handle_imbalance(X_scaled, y)
 
-    # Split data into train and test sets
-    X_train, X_test, y_train, y_test = train_test_split(X_resampled, y_resampled, test_size=0.2, random_state=42)
+    # Split data into train, validation, and test sets
+    X_train, X_temp, y_train, y_temp = train_test_split(X_resampled, y_resampled, test_size=0.3, random_state=42)
+    X_val, X_test, y_val, y_test = train_test_split(X_temp, y_temp, test_size=0.5, random_state=42)
 
-    # Train and evaluate the model
-    model = train_model(X_train, y_train)
+    # Train the model using XGBoost with validation set
+    model = train_model(X_train, y_train, X_val, y_val)
+
+    # Evaluate the model
     evaluate_model(model, X_test, y_test)
 
     # Save the model and scaler
-    save_model(model, scaler, "models/improved_code_quality_model.pkl", "models/improved_scaler.pkl")
+    save_model(model, scaler, "models/improved_xgb_model.pkl", "models/improved_scaler.pkl")
 
 if __name__ == "__main__":
     main()

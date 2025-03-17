@@ -17,13 +17,14 @@ def add_interaction_features(data):
     """
     Create interaction features to capture relationships between variables.
     """
-    data['density'] = data['wmc'] / (data['loc'] + 1)  # Methods per line of code
+    data['density'] = data['wmc'] / (data['loc'] + 1)  #get the avarage Methods per line of code
     data['cohesion'] = data['tcc'] * data['lcom*']     # Combined cohesion metric
     return data
 
 def preprocess_features(X):
     """
-    Scale numerical features and handle missing values.
+    Prepares the numerical data for use in machine learning models
+    by addressing missing values and scaling
     """
     # Handle missing values (impute with the mean)
     imputer = SimpleImputer(strategy='mean')
