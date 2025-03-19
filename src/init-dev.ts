@@ -1,12 +1,13 @@
+import dotenv from 'dotenv'
+dotenv.config()
 import { errorHandler } from '@helpers/errorHandler'
 import cors from 'cors'
-import dotenv from 'dotenv'
 import express, { NextFunction, Request, Response } from 'express'
 
 import authRouter from './api/auth/index.router'
+import projectRouter from './api/project/index.router'
 import { connectDB } from './config/db'
-
-dotenv.config()
+import issueRouter from './api/issue/index.router'
 
 connectDB()
 
@@ -27,6 +28,8 @@ app.get('/', (_, res) =>
 )
 
 app.use('/auth', authRouter)
+app.use('/issues', issueRouter)
+app.use('/project', projectRouter)
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.log(err)
