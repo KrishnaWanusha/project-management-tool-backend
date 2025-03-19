@@ -37,6 +37,6 @@ export const getAllGitHubIssues = async (owner: string, repo: string) => {
     return issues
   } catch (error) {
     console.error('Error fetching issues:', error)
-    throw error
+    return []
   }
 }

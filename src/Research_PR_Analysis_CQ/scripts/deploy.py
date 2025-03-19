@@ -8,8 +8,9 @@ import numpy as np
 from joblib import load
 import radon.metrics
 import radon.raw
-import re
 from scripts.logsModule import logger
+from fastapi.responses import JSONResponse
+from fastapi.middleware.cors import CORSMiddleware
 
 # Load environment variables
 load_dotenv()
@@ -21,6 +22,14 @@ GITHUB_ACCESS_TOKEN_URL = "https://github.com/login/oauth/access_token"
 
 # FastAPI instance
 app = FastAPI()
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],  
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Temporary storage for user tokens (replace with DB in production)
 user_tokens = {}
@@ -81,30 +90,15 @@ def callback(code: str = Query(...), repo_name: str = Query(None)):
 
     access_token = token_response["access_token"]
     user = get_github_user(access_token)
-
-    # Store the token and repositories for the user
+    
+    # Store the token and username
     user_tokens[user["login"]] = {
         "access_token": access_token,
         "repos": get_user_repositories(access_token)
     }
 
-    try:
-        # Decide which analysis to perform
-        if repo_name:
-            logger.info(f"Analyzing specific repository: {repo_name} for user: {user['login']}")
-            analysis_results = analyze_single_repo(user["login"], repo_name)
-        else:
-            logger.info(f"Analyzing all repositories for user: {user['login']}")
-            analysis_results = analyze_all_repositories(user["login"])
-
-    except Exception as e:
-        logger.error(f"Error during analysis: {e}")
-        raise HTTPException(status_code=400, detail=f"Error analyzing repositories: {str(e)}")
-
-    return {
-        "message": f"Welcome, {user['login']}! Analysis completed successfully.",
-        "analysis_results": analysis_results
-    }
+    # Redirect back to the Next.js dashboard with the username
+    return RedirectResponse(f"http://localhost:3000/project-management/prAnalysis?username={user['login']}")
 
 
 
@@ -115,6 +109,7 @@ def get_github_user(access_token):
     """
     user_request = requests.get(
         "https://api.github.com/user",
+        
         headers={"Authorization": f"Bearer {access_token}"}
     )
     if user_request.status_code != 200:
@@ -137,19 +132,17 @@ def get_user_repositories(access_token):
     repos = repos_request.json()
     return [{"name": repo["name"], "full_name": repo["full_name"]} for repo in repos]
 
-
-# Example of calling the function
 @app.get("/analyze_all_repos")
 def analyze_all_repositories(username: str):
     """
     Analyze all pull requests (PRs) in repositories for the logged-in user.
-    Returns a percentage-based quality score and ML model prediction.
+    Returns a structured JSON response.
     """
     logger.info(f"Starting analysis for user: {username}")
 
     if username not in user_tokens:
         logger.error("User not authenticated")
-        raise HTTPException(status_code=403, detail="User not authenticated")
+        return JSONResponse(status_code=403, content={"error": "User not authenticated"})
 
     access_token = user_tokens[username]["access_token"]
     github = Github(access_token)
@@ -158,13 +151,17 @@ def analyze_all_repositories(username: str):
         repos = user_tokens[username]["repos"]
         if not repos:
             logger.warning(f"No repositories found for user: {username}")
-            raise HTTPException(status_code=404, detail="No repositories found")
+            return JSONResponse(status_code=404, content={"error": "No repositories found"})
 
         results = []
         logger.info(f"Found {len(repos)} repositories for user: {username}")
-
+        allowed_repos = ["DulanyaSevindi/MobileFrontend","IT21277436/QBusBackend","DulanyaSevindi/QBusMobile","DulanyaSevindi/testing","KrishnaWanusha/project-management-tool-backend"]
         for repo_info in repos:
             repo_name = repo_info["full_name"]
+
+            if repo_name not in allowed_repos:
+                    continue
+
             logger.info(f"Analyzing repository: {repo_name}")
 
             try:
@@ -173,34 +170,26 @@ def analyze_all_repositories(username: str):
                 pr_results = []
 
                 if pull_requests.totalCount == 0:
-                    logger.info(f"No pull requests found for repository: {repo_name}")
                     results.append({
                         "repo_name": repo_name,
-                        "pull_requests": "No pull requests found."
+                        "pull_requests": []
                     })
                     continue
 
-                logger.info(f"Found {pull_requests.totalCount} pull requests in repository: {repo_name}")
-
                 for pr in pull_requests:
-                    logger.info(f"Analyzing PR #{pr.number}: {pr.title}")
-
                     pr_files = pr.get_files()
                     code_metrics = []
                     unsupported_files = []
 
                     for file in pr_files:
                         if file.filename.endswith((".py", ".js", ".ts", ".tsx", ".java", ".cs", ".html", ".css", ".jsx")):
-                            logger.debug(f"Analyzing file in PR: {file.filename}")
                             try:
                                 content = repo.get_contents(file.filename).decoded_content.decode()
                                 metrics = extract_metrics_from_code(content)
-                                logger.info(f"Extracted metrics for file: {file.filename}")
                                 code_metrics.append(metrics)
                             except Exception as file_error:
                                 logger.error(f"Error analyzing file {file.filename} in PR #{pr.number}: {file_error}")
                         else:
-                            logger.warning(f"Unsupported file type in PR #{pr.number}: {file.filename}")
                             unsupported_files.append(file.filename)
 
                     pr_result = {
@@ -211,27 +200,16 @@ def analyze_all_repositories(username: str):
 
                     if code_metrics:
                         aggregated_metrics = aggregate_metrics(code_metrics)
-                        logger.info(f"Aggregated metrics for PR #{pr.number}: {aggregated_metrics}")
-
-                        # **Compute Quality Score**
                         quality_percentage = compute_quality_score(aggregated_metrics)
 
-                        # **Call Model for Prediction**
                         input_features = np.array([list(aggregated_metrics.values())])
                         scaled_features = scaler.transform(input_features)
                         prediction = model.predict(scaled_features)
                         quality_label = "Good" if prediction[0] == 1 else "Bad"
 
-                        logger.info(f"Code Quality Score for PR #{pr.number} in repository {repo_name}: {quality_percentage}%")
-                        logger.info(f"ML Model Prediction for PR #{pr.number} in repository {repo_name}: {quality_label}")
-
-                        # Add results to PR analysis
                         pr_result["quality_score"] = quality_percentage
-                        pr_result["ml_prediction"] = quality_label  # From the ML model
+                        pr_result["ml_prediction"] = quality_label
                         pr_result["metrics"] = aggregated_metrics
-                    else:
-                        pr_result["quality_score"] = "No analysis (unsupported files only)"
-                        pr_result["ml_prediction"] = "No analysis"
 
                     pr_results.append(pr_result)
 
@@ -240,16 +218,13 @@ def analyze_all_repositories(username: str):
             except Exception as repo_error:
                 logger.error(f"Error analyzing repository {repo_name}: {repo_error}")
 
-        logger.info(f"Completed analysis for user: {username}")
-        return {"username": username, "repositories": results}
+        response_data = {"username": username, "repositories": results}
+        logger.info(f"Returning analysis result: {response_data}")
+        return JSONResponse(content=response_data)
 
     except Exception as e:
         logger.error(f"Error analyzing repositories for user {username}: {e}")
-        raise HTTPException(status_code=400, detail=f"Error analyzing repositories: {str(e)}")
-
-    
-
-
+        return JSONResponse(status_code=500, content={"error": f"Error analyzing repositories: {str(e)}"})
 
 @app.get("/analyze_single_repo")
 def analyze_single_repo(username: str, repo_name: str = Query(None)):
