@@ -6,7 +6,7 @@ const upload = multer({ dest: 'uploads/' })
 
 const issueRouter = express.Router()
 
-issueRouter.post('/srs/upload', upload.single('srs'), uploadFile)
+issueRouter.post('/srs/upload', upload.single('file'), uploadFile)
 
 issueRouter.post('/create', createIssue)
 

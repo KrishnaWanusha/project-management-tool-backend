@@ -32,6 +32,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", ".eslintrc.js", "__tests__/**/*"],
+  "include": ["types", "src/**/*", ".eslintrc.js", "__tests__/**/*"],
   "exclude": ["./dist/**/*", "./node_modules/**/*"]
 }

@@ -1,43 +1,64 @@
 import { AppError, HttpStatus } from '@helpers/errorHandler'
 import { Request, Response, RequestHandler, NextFunction } from 'express'
-import fs from 'fs/promises'
-import pdfParse from 'pdf-parse'
-import openAi from '../ai'
+import fs from 'fs'
+import { exec } from 'child_process'
+import axios from 'axios'
+
 type FileUploadReq = {
   file: File
 }
 
-const uploadFile: RequestHandler = async (
+const uploadFile: RequestHandler = (
   req: Request<{}, {}, FileUploadReq>,
   res: Response,
   next: NextFunction
 ) => {
   if (!req.file) {
-    throw new AppError(HttpStatus.BAD_REQUEST, 'File not found')
+    return next(new AppError(HttpStatus.BAD_REQUEST, 'File not found'))
   }
 
-  try {
-    // Read and parse PDF
-    const dataBuffer = await fs.readFile(req.file.path)
-    const pdfData = await pdfParse(dataBuffer)
-    const extractedText = pdfData.text
-    console.log(extractedText)
-    const prompt = 'what is open ai'
-    // const prompt = `
-    //       Extract details from the following SRS document:
-    //       ---
-    //       ${extractedText}
-    //       ---
-    //       Provide:
-    //       1. Project Name
-    //       2. Key Requirements
-    //       3. Expected Outcome
-    // `
-    const response = await openAi(prompt)
+  const pdfPath = req.file.path
+  const pythonScript = 'ai_model/extract_requirements.py'
 
-    res.status(HttpStatus.CREATED).json({ success: true, response })
-  } catch (e: any) {
-    next(e)
-  }
+  return new Promise<void>((resolve, _reject) => {
+    exec(`python ${pythonScript} ${pdfPath}`, async (error, stdout, stderr) => {
+      if (error) {
+        console.error(`Python error: ${stderr}`)
+        res.status(500).json({ error: 'Failed to extract requirements' })
+        return resolve()
+      }
+
+      try {
+        const parsedRequirements = JSON.parse(stdout)
+        // Initialize an array to store tasks
+        const tasks = []
+        const requirements = parsedRequirements.filter(
+          (requirement: string | null) => requirement !== '' && requirement !== null
+        )
+        console.log('requirements', requirements)
+        // Loop through each requirement and send it to the model one by one
+        for (let i = 0; i < requirements.length; i++) {
+          let requirement = requirements[i]
+          if (requirement !== null) {
+            const response = await axios.get(
+              `http://localhost:8000/api/v1/predict?text=${requirement}`
+            )
+            tasks.push({ requirement, tasks: response.data?.tasks?.map((task: any) => task.task) })
+          }
+        }
+
+        // Send the final response with all requirements and their tasks
+        res.json({ tasks })
+        resolve()
+      } catch (err) {
+        res.status(500).json({ error: 'Model prediction failed', err: err })
+        resolve()
+      } finally {
+        // Clean up uploaded file
+        fs.unlinkSync(pdfPath)
+      }
+    })
+  })
 }
+
 export default uploadFile
