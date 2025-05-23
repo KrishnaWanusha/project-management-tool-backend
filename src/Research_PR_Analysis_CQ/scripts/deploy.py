@@ -155,7 +155,7 @@ def analyze_all_repositories(username: str):
 
         results = []
         logger.info(f"Found {len(repos)} repositories for user: {username}")
-        allowed_repos = ["DulanyaSevindi/MobileFrontend","IT21277436/QBusBackend","DulanyaSevindi/QBusMobile","DulanyaSevindi/testing","KrishnaWanusha/project-management-tool-backend"]
+        allowed_repos = ["DulanyaSevindi/MobileFrontend","IT21277436/QBusBackend","KrishnaWanusha/project-management-tool-backend"]
         for repo_info in repos:
             repo_name = repo_info["full_name"]
 
@@ -375,53 +375,6 @@ def compute_quality_score(metrics):
     quality_score = sum(scores) * 100 / sum(weights.values())
 
     return round(quality_score, 2)
-
-
-
-
-
-
-
-
-# def _get_repository_contents(repo, path=""):
-#     """
-#     Recursively fetch only .py and .js files in the repository, excluding public system-generated files
-#     and specified formats like .png and .xml.
-#     """
-#     try:
-#         logger.debug(f"Fetching contents for repo {repo.full_name}, path: {path}")
-#         contents = repo.get_contents(path)
-#         filtered_files = []
-
-#         # Define patterns or filenames to exclude
-#         excluded_files = {
-#             "README.md", "LICENSE", ".gitignore", "package-lock.json", "yarn.lock", "Dockerfile",
-#             ".github/", "__init__.py", "build/", "dist/", ".env", ".vscode/", "node_modules/", "public/"
-#         }
-
-#         for content in contents:
-#             # Skip directories or files matching the excluded patterns
-#             if content.type == "dir":
-#                 if any(excluded in content.path for excluded in excluded_files):
-#                     logger.debug(f"Skipping excluded directory: {content.path}")
-#                     continue
-#                 logger.debug(f"Entering directory: {content.path}")
-#                 filtered_files.extend(_get_repository_contents(repo, content.path))
-#             elif content.path.endswith((".py", ".js" , ".tsx" , ".java" , ".cs")) and not content.path.endswith((".png", ".xml")) and content.size < 1_000_000:
-#                 if any(excluded in content.path for excluded in excluded_files):
-#                     logger.debug(f"Skipping excluded file: {content.path}")
-#                     continue
-#                 logger.debug(f"Adding file: {content.path}")
-#                 filtered_files.append(content)
-#             else:
-#                 logger.debug(f"Skipping file with unsupported format: {content.path}")
-
-#         return filtered_files
-#     except Exception as e:
-#         logger.error(f"Error fetching contents for repo {repo.full_name}, path {path}: {e}")
-#         return []
-
-
 
 
 def extract_metrics_from_code(code):
