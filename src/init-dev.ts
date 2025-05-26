@@ -6,6 +6,7 @@ import express, { NextFunction, Request, Response } from 'express'
 
 import authRouter from './api/auth/index.router'
 import projectRouter from './api/project/index.router'
+import estimateRouter from './api/risk/index.router'
 import { connectDB } from './config/db'
 import issueRouter from './api/issue/index.router'
 
@@ -30,6 +31,7 @@ app.get('/', (_, res) =>
 app.use('/auth', authRouter)
 app.use('/issues', issueRouter)
 app.use('/project', projectRouter)
+app.use('/estimate', estimateRouter)
 
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
   console.log(err)
