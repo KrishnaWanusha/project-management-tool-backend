@@ -18,18 +18,13 @@ export const app = express()
 const allowedOrigins = ['https://vortexa.ugg-roleplay.com', 'https://localhost:3000']
 app.use(
   cors({
-    origin: function (origin, callback) {
-      if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true)
-      } else {
-        callback(new Error('Not allowed by CORS'))
-      }
-    },
+    origin: allowedOrigins,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
     credentials: true
   })
 )
+app.options('*', cors())
+
 app.use(express.json())
 
 app.use((req, _res, next) => {
