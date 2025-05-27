@@ -15,16 +15,7 @@ connectDB()
 
 export const app = express()
 
-const allowedOrigins = ['https://vortexa.ugg-roleplay.com', 'https://localhost:3000']
-app.use(
-  cors({
-    origin: allowedOrigins,
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-    credentials: true
-  })
-)
-app.options('*', cors())
-
+app.use(cors())
 app.use(express.json())
 
 app.use((req, _res, next) => {
