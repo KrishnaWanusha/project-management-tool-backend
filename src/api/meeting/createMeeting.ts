@@ -76,6 +76,7 @@
 // }
 
 // export default createMeeting
+
 import { Request, Response, NextFunction } from 'express';
 import { db, bucket } from '../../config/firebaseConfig'; // Your Firebase config import
 import axios from 'axios';
@@ -85,9 +86,11 @@ const createMeeting = async (req: Request, res: Response, next: NextFunction) =>
     const { name, description, type, date, members } = req.body;
     const file = req.file;
 
+
     if (!file) {
       return res.status(400).json({ success: false, message: 'No file uploaded.' });
     }
+
 
     // Upload file to Firebase Storage bucket
     const remoteFilePath = `meetings/${file.originalname}`;
@@ -102,15 +105,25 @@ const createMeeting = async (req: Request, res: Response, next: NextFunction) =>
     // e.g. "meetings/filename.mp4"
     const firebaseStoragePath = remoteFilePath;
 
+  
+
     // URL of your hosted Flask API (update to your real Flask URL)
-    const flaskApiUrl = 'https://document-gen-python.niceflower-88a4168e.eastus.azurecontainerapps.io/process';
+    const flaskApiUrl = 'http://python.ugg-roleplay.com/process';
+    //const flaskApiUrl = 'http://127.0.0.1:5000/process';
 
     // Send Firebase Storage path to Flask API in JSON body
+
     const response = await axios.post(flaskApiUrl, {
       firebase_path: firebaseStoragePath
-    });
+    },{
+  maxContentLength: Infinity,
+  maxBodyLength: Infinity,
+  timeout: 1000000, // 5 minutes, adjust as needed
+});
+
 
     const { transcript, summary, sentiment_label, sentiment_score } = response.data;
+
 
     // Save meeting info + analysis results to Firestore
     const meetingRef = await db.collection('meetings').add({
@@ -130,6 +143,8 @@ const createMeeting = async (req: Request, res: Response, next: NextFunction) =>
       createdAt: new Date(),
     });
 
+
+
     return res.status(201).json({
       success: true,
       message: 'Meeting created and processed successfully!',
@@ -142,7 +157,7 @@ const createMeeting = async (req: Request, res: Response, next: NextFunction) =>
       summary,
     });
   } catch (error) {
-    console.error('Error creating meeting:', error);
+    // console.error('Error creating meeting:', error);
     return next(error);
   }
 };
