@@ -1,6 +1,7 @@
 // routes/estimatorRoutes.ts
 import express from 'express'
 import * as estimatorController from '../risk/estimatorController'
+import * as issueController from '../risk/issueController'
 
 const estimateRouter = express.Router()
 
@@ -37,6 +38,10 @@ estimateRouter.put('/update-team-estimate', (req, res) => {
 
 estimateRouter.post('/save-story', (req, res) => {
   estimatorController.saveStory(req, res)
+})
+
+estimateRouter.get('/issues/get', (req, res) => {
+  issueController.getIssuesByRepository(req, res)
 })
 
 export default estimateRouter

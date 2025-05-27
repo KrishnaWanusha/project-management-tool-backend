@@ -2,6 +2,7 @@
 import { Request, Response } from 'express'
 import estimatorService from './estimatorService'
 import StoryModel, { ComparisonStatus, RiskLevel } from '../../models/storypoint.model'
+import IssueModel from '@models/issue.model'
 
 /**
  * @param story The Story document from database
@@ -176,6 +177,31 @@ export const batchEstimateStoryPoints = async (req: Request, res: Response) => {
           projectId
         }
       })
+
+      const operations = combinedResults
+        ?.filter((story) => story.storyPoint !== undefined && story.repository)
+        .map((story) => ({
+          updateOne: {
+            filter: { githubId: story.githubId },
+            update: {
+              $set: {
+                repository: story.repository,
+                storyPoint: story.storyPoint,
+                confidence: story.confidence,
+                fullAdjustment: story.fullAdjustment,
+                appliedAdjustment: story.appliedAdjustment,
+                dqnInfluence: story.dqnInfluence,
+                teamEstimate: story.teamEstimate,
+                difference: story.difference
+              }
+            },
+            upsert: true
+          }
+        }))
+
+      if (operations?.length) {
+        await IssueModel.bulkWrite(operations)
+      }
 
       return res.status(200).json({
         success: true,
@@ -408,12 +434,12 @@ export const getStoriesByProjectId = async (req: Request, res: Response) => {
 export const updateTeamEstimate = async (req: Request, res: Response) => {
   try {
     console.log('Received update team estimate request:', req.body)
-    const { storyId, teamEstimate } = req.body
+    const { issue, teamEstimate } = req.body
 
-    if (!storyId) {
+    if (!issue) {
       return res.status(400).json({
         success: false,
-        error: 'Story ID is required'
+        error: 'Issue data is required'
       })
     }
 
@@ -425,19 +451,23 @@ export const updateTeamEstimate = async (req: Request, res: Response) => {
     }
 
     try {
-      const updatedStory = await estimatorService.updateTeamEstimate(
-        storyId,
-        parseFloat(teamEstimate) // Ensure it's a number
+      const updatedIssue = await IssueModel.findOneAndUpdate(
+        { githubId: issue?.githubId },
+        {
+          $set: { teamEstimate: parseFloat(teamEstimate) },
+          $setOnInsert: { githubId: issue?.id, repository: issue?.repository }
+        },
+        { upsert: true, new: true }
       )
 
       // Transform the result to match frontend expectations
-      const transformedStory = transformStoryForClient(updatedStory)
+      const transformedIssue = transformStoryForClient(updatedIssue)
 
-      console.log('Successfully updated team estimate for story:', transformedStory)
+      console.log('Successfully updated team estimate for issue:', transformedIssue)
 
       return res.status(200).json({
         success: true,
-        data: transformedStory
+        data: transformedIssue
       })
     } catch (serviceError: any) {
       console.error('Service error updating team estimate:', serviceError)

@@ -9,9 +9,29 @@ import pandas as pd
 from sklearn.metrics import mean_absolute_error, accuracy_score
 import time
 from datetime import datetime
+import gdown
+import os
+
 
 # Path to models
 MODEL_DIR = os.path.dirname(__file__)
+
+
+os.makedirs(MODEL_DIR, exist_ok=True)
+
+def download_if_not_exists(file_id, filename):
+    dest_path = os.path.join(MODEL_DIR, filename)
+    if not os.path.exists(dest_path):
+        url = f"https://drive.google.com/uc?id={file_id}"
+        gdown.download(url, dest_path, quiet=False)
+    return dest_path
+
+# Example usage
+dqn_model_path = download_if_not_exists("1Xx74nw9jcfzkzay-KkTExsmSqNr00XXn", "dqn_model.h5")
+inverse_mapping_path = download_if_not_exists("1yTNdV-87QiqSE1iZWtHLwnb7fto9g6zt", "inverse_mapping.joblib")
+label_mapping_path = download_if_not_exists("1FECF3ep_HhuqOvz0IS4IjbZjMfRncD7p", "label_mapping.joblib")
+rf_model_path = download_if_not_exists("1lIFVepRPT_IH7s1ljzktDKtlt6M-B30w", "rf_model.joblib")
+vectorizer_path = download_if_not_exists("1pWNiODIW8NdZwgQkXuLQQPP_j8qcXg4R", "vectorizer.joblib")
 
 # Valid story point values in Fibonacci sequence used in Agile
 VALID_STORY_POINTS = [0.5, 1, 2, 3, 5, 8, 13, 20, 40, 100]
@@ -42,6 +62,7 @@ def mse(y_true, y_pred):
 # Register the MSE function with Keras
 keras.utils.get_custom_objects().update({'mse': mse})
 
+
 def load_models():
     """Load all required models"""
     # Use stderr for logging instead of stdout
@@ -49,21 +70,21 @@ def load_models():
     start_time = time.time()
     try:
         # Load Random Forest model
-        rf_model = joblib.load(os.path.join(MODEL_DIR, 'rf_model.joblib'))
+        rf_model = joblib.load(rf_model_path)
         print(f"RF model loaded successfully ({time.time() - start_time:.2f}s)", file=sys.stderr)
         
         # Load TF-IDF vectorizer
-        tfidf = joblib.load(os.path.join(MODEL_DIR, 'vectorizer.joblib'))
+        tfidf = joblib.load(vectorizer_path)
         print(f"TF-IDF vectorizer loaded successfully ({time.time() - start_time:.2f}s)", file=sys.stderr)
         
         # Load DQN model
-        dqn_model = keras.models.load_model(os.path.join(MODEL_DIR, 'dqn_model.h5'), compile=False)
+        dqn_model = keras.models.load_model(dqn_model_path, compile=False)
         dqn_model.compile(optimizer='adam', loss='mse')
         print(f"DQN model loaded successfully ({time.time() - start_time:.2f}s)", file=sys.stderr)
         
         # Load label mappings
-        label_mapping = joblib.load(os.path.join(MODEL_DIR, 'label_mapping.joblib'))
-        inverse_mapping = joblib.load(os.path.join(MODEL_DIR, 'inverse_mapping.joblib'))
+        label_mapping = joblib.load(label_mapping_path)
+        inverse_mapping = joblib.load(inverse_mapping_path)
         print(f"Label mappings loaded successfully ({time.time() - start_time:.2f}s)", file=sys.stderr)
         
         return {
