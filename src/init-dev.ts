@@ -2,7 +2,6 @@ import 'module-alias/register'
 import dotenv from 'dotenv'
 dotenv.config()
 import { errorHandler } from '@helpers/errorHandler'
-import cors from 'cors'
 import express, { NextFunction, Request, Response } from 'express'
 
 import authRouter from './api/auth/index.router'
@@ -15,7 +14,6 @@ connectDB()
 
 export const app = express()
 
-app.use(cors())
 app.use(express.json())
 
 app.use((req, _res, next) => {
