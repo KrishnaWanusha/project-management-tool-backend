@@ -38,10 +38,10 @@ jobs:
             docker system prune -af || true
             rm -rf ~/.cache/pip || true
 
-            PORT=8000
+            PORT=4000
 
             # More thorough port cleanup
-            # Check for any process using port 8000 (including Docker containers)
+            # Check for any process using port 4000 (including Docker containers)
             sudo lsof -i :$PORT | awk 'NR!=1 {print $2}' | xargs -r sudo kill -9 || true
 
             # Stop and remove the container if it exists
