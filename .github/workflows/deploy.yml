@@ -35,27 +35,25 @@ jobs:
           key: ${{ secrets.EC2_SSH_KEY }}
           script: |
             # Clean up Docker resources
-            docker system prune -af || true
-            rm -rf ~/.cache/pip || true
+            sudo docker system prune -af || true
 
             PORT=4000
 
             # More thorough port cleanup
-            # Check for any process using port 4000 (including Docker containers)
             sudo lsof -i :$PORT | awk 'NR!=1 {print $2}' | xargs -r sudo kill -9 || true
 
             # Stop and remove the container if it exists
-            docker stop vortexa-backend || true
-            docker rm vortexa-backend || true
+            sudo docker stop vortexa-backend || true
+            sudo docker rm vortexa-backend || true
 
             # Additional check to ensure no Docker container is using the port
-            docker ps -q --filter publish=$PORT | xargs -r docker stop || true
+            sudo docker ps -q --filter publish=$PORT | xargs -r sudo docker stop || true
 
             # Wait a moment for the port to be fully released
             sleep 5
 
             # Pull the latest image
-            docker pull ${{ secrets.DOCKERHUB_USERNAME }}/vortexa-backend:latest
+            sudo docker pull ${{ secrets.DOCKERHUB_USERNAME }}/vortexa-backend:latest
 
             # Create environment file
             echo "PORT=4000" > .env
@@ -66,4 +64,4 @@ jobs:
             echo "OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}" >> .env
 
             # Run the container with automatic restart
-            docker run -d --restart unless-stopped --env-file .env --name vortexa-backend -p $PORT:$PORT ${{ secrets.DOCKERHUB_USERNAME }}/vortexa-backend:latest
+            sudo docker run -d --restart unless-stopped --env-file .env --name vortexa-backend -p $PORT:$PORT ${{ secrets.DOCKERHUB_USERNAME }}/vortexa-backend:latest
