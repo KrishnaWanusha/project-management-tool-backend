@@ -32,6 +32,6 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*", ".eslintrc.js", "__tests__/**/*"],
+  "include": ["src/**/*", ".eslintrc.js", "__tests__/**/*", "src/services/videoToAudio.ts"],
   "exclude": ["./dist/**/*", "./node_modules/**/*"]
 }
