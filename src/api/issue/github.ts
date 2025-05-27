@@ -10,7 +10,7 @@ interface GithubIssue {
 
 // Initialize Octokit with your personal access token
 const octokit = new Octokit({
-  auth: process.env.GITHUB_AUTH
+  auth: process.env.G_AUTH
 })
 
 export const createGitHubIssue = async (context: GithubIssue) => {

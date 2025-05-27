@@ -1,5 +1,4 @@
 {
-  "extends": "./tsconfig.paths.json",
   "compilerOptions": {
     "experimentalDecorators": true,
     "emitDecoratorMetadata": true,
@@ -24,6 +23,12 @@
 
     "target": "es2018",
     "outDir": "./dist",
+    "rootDir": "./src",
+    "baseUrl": ".",
+    "paths": {
+      "@helpers/*": ["src/helpers/*"],
+      "@models/*": ["src/models/*"]
+    },
     "declaration": true,
     "sourceMap": true,
     "esModuleInterop": true,
