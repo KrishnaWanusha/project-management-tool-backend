@@ -17,7 +17,7 @@ export const app = express()
 
 app.use(
   cors({
-    origin: 'https://vortexa.ugg-roleplay.com',
+    origin: '*',
     methods: ['GET', 'POST', 'PUT', 'DELETE'],
     credentials: true
   })
