@@ -1,0 +1,6 @@
+joblib
+numpy
+tensorflow
+pandas
+scikit-learn
+gdown

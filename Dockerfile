@@ -1,61 +1,47 @@
 # Build stage
-FROM node:18-alpine as builder
-
-RUN apk add --no-cache python3 py3-pip
-RUN pip install joblib numpy tensorflow pandas scikit-learn gdown
+FROM node:18 as builder
 
 WORKDIR /app
 
-# Copy all necessary files for building
+# Copy project files
 COPY package*.json ./
 COPY tsconfig.json ./
 COPY src/ ./src/
 COPY models/ ./models/
 COPY ai_model/ ./ai_model/
 
-# Install ALL dependencies
+# Install dependencies and build
 RUN npm install
-
-# Build the application
 RUN npm run build
 
-# Production stage
-FROM node:18-alpine
+# Final stage with Python
+FROM python:3.10-slim
 
-RUN apk add --no-cache python3 py3-pip
-RUN pip install joblib numpy tensorflow pandas scikit-learn gdown
+# Install Node.js and npm
+RUN apt-get update && \
+    apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_18.x | bash - && \
+    apt-get install -y nodejs
 
 WORKDIR /app
 
-# Copy package files and install production dependencies
+# Install Python dependencies
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy app files
 COPY package*.json ./
 COPY tsconfig.json ./
 RUN npm install --production
-
-# Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/models ./models
 COPY --from=builder /app/ai_model ./ai_model
 
-# Install tsconfig-paths
-RUN npm install tsconfig-paths
+# Set up app folder
+RUN mkdir -p /app/uploads && chmod -R 755 /app
 
-# Create uploads directory and set permissions
-RUN mkdir -p /app/uploads && \
-    chown -R node:node /app && \
-    chmod -R 755 /app
-
-# Switch to non-root user
-USER node
-
-# Expose port
 EXPOSE 4000
 
-# Set NODE_ENV
 ENV NODE_ENV=production
 
-# Create a volume for uploads
-VOLUME ["/app/uploads"]
-
-# Start the application
 CMD ["npm", "start"]
