@@ -9,6 +9,8 @@ WORKDIR /app
 COPY package*.json ./
 COPY tsconfig.json ./
 COPY src/ ./src/
+COPY models/ ./models/
+COPY ai_model/ ./ai_model/
 
 # Install ALL dependencies
 RUN npm install
@@ -30,6 +32,8 @@ RUN npm install --production
 
 # Copy built files from builder stage
 COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/models ./models
+COPY --from=builder /app/ai_model ./ai_model
 
 # Install tsconfig-paths
 RUN npm install tsconfig-paths
