@@ -2,6 +2,7 @@
 FROM node:18-alpine as builder
 
 RUN apk add --no-cache python3 py3-pip
+RUN pip install joblib numpy tensorflow pandas scikit-learn gdown
 
 WORKDIR /app
 
@@ -22,6 +23,7 @@ RUN npm run build
 FROM node:18-alpine
 
 RUN apk add --no-cache python3 py3-pip
+RUN pip install joblib numpy tensorflow pandas scikit-learn gdown
 
 WORKDIR /app
 
