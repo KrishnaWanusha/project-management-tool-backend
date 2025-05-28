@@ -28,8 +28,8 @@ def extract_requirement_sentences(text):
 
 def extract_requirements(text):
     # Match sections
-    functional_pattern = r'\s*Functional Requirements(.*?)(?=\s*Non[- ]Functional Requirements)'
-    non_functional_pattern = r'\s*Non[- ]Functional Requirements(.*)'
+    functional_pattern = r'3\.1\s*Functional Requirements(.*?)(?=3\.2\s*Non[- ]Functional Requirements)'
+    non_functional_pattern = r'3\.2\s*Non[- ]Functional Requirements(.*)'
 
     functional_match = re.search(functional_pattern, text, re.IGNORECASE | re.DOTALL)
     non_functional_match = re.search(non_functional_pattern, text, re.IGNORECASE | re.DOTALL)
