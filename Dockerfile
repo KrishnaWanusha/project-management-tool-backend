@@ -1,7 +1,7 @@
 # Build stage
 FROM node:18-alpine as builder
 
-RUN apt-get update && apt-get install -y python3 python3-pip
+RUN apk add --no-cache python3 py3-pip
 
 WORKDIR /app
 
@@ -19,7 +19,7 @@ RUN npm run build
 # Production stage
 FROM node:18-alpine
 
-RUN apt-get update && apt-get install -y python3 python3-pip
+RUN apk add --no-cache python3 py3-pip
 
 WORKDIR /app
 
