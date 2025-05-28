@@ -25,9 +25,10 @@ RUN apt-get update && \
 
 WORKDIR /app
 
-# Install Python dependencies
+# Install Python dependencies including nltk
 COPY requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt && \
+    python -m nltk.downloader punkt stopwords
 
 # Copy app files
 COPY package*.json ./
