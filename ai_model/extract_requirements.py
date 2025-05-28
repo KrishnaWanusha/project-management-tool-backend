@@ -1,64 +1,49 @@
 import sys
 import json
-import pandas as pd
 import re
-import nltk
-from nltk.corpus import stopwords
-from nltk.tokenize import word_tokenize
-from tabula import read_pdf
+from pdfminer.high_level import extract_text
 
-nltk.download('punkt')
-nltk.download('stopwords')
-nltk.download('punkt_tab')
+def extract_requirement_sentences(text):
+    # Normalize whitespace
+    text = re.sub(r'\s+', ' ', text)
 
-stop_words = set(stopwords.words('english'))
+    # Split into sentences
+    sentences = re.split(r'(?<=[.!?])\s+', text)
 
-def preprocess_text(text):
-    if isinstance(text, str):
-        text = text.lower()
-        text = re.sub(r'[^a-zA-Z\s]', '', text)
-        text = text.strip()
-    else:
-        text = ""  # Return empty string if the text is not a valid string
-    return text
+    # Requirement modal keywords
+    keywords = ['should', 'must', 'shall', 'could', 'can', 'may', 'might']
 
-# Get the PDF file path from command-line argument
+    # Remove filler words only from the beginning
+    filler_pattern = re.compile(r'^(so|then|thus|therefore|and|but|because|well)\s+', re.IGNORECASE)
+
+    filtered = []
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence or sentence.endswith('?'):
+            continue
+        if any(re.search(rf'\b{kw}\b', sentence, re.IGNORECASE) for kw in keywords):
+            sentence = filler_pattern.sub('', sentence)
+            filtered.append(sentence)
+    return filtered
+
+def extract_requirements(text):
+    # Match sections
+    functional_pattern = r'\s*Functional Requirements(.*?)(?=\s*Non[- ]Functional Requirements)'
+    non_functional_pattern = r'\s*Non[- ]Functional Requirements(.*)'
+
+    functional_match = re.search(functional_pattern, text, re.IGNORECASE | re.DOTALL)
+    non_functional_match = re.search(non_functional_pattern, text, re.IGNORECASE | re.DOTALL)
+
+    functional_raw = functional_match.group(1).strip() if functional_match else ""
+    non_functional_raw = non_functional_match.group(1).strip() if non_functional_match else ""
+
+    return {
+        "functional_requirements": extract_requirement_sentences(functional_raw),
+        "non_functional_requirements": extract_requirement_sentences(non_functional_raw)
+    }
+
+# Entry point
 pdf_path = sys.argv[1]
-tables = read_pdf(pdf_path, pages="all", multiple_tables=True)
-
-extracted_requirements = []
-
-for table in tables:
-    # Check for 'Number' or 'Name' column and decide accordingly
-    column_to_check = None
-    if 'Number' in table.columns:
-        column_to_check = 'Number'
-    elif 'Name' in table.columns:
-        column_to_check = 'Name'
-    
-    if column_to_check and table[column_to_check].astype(str).str.contains('Summary', case=False, na=False).any():
-        use_case_name, summary, priority, trigger, pre_conditions, post_conditions = "", "", "", "", "", ""
-
-        for _, row in table.iterrows():
-            column_name = row[column_to_check]
-            if isinstance(column_name, float):
-                continue
-            column_value = row.iloc[1]
-            
-            if 'name' in column_name.lower():
-                use_case_name = preprocess_text(column_value)
-            elif 'summary' in column_name.lower():
-                summary = preprocess_text(column_value)
-            elif 'priority' in column_name.lower():
-                priority = preprocess_text(column_value)
-            elif 'trigger' in column_name.lower():
-                trigger = preprocess_text(column_value)
-            elif 'pre-condition' in column_name.lower():
-                pre_conditions = preprocess_text(column_value)
-            elif 'post-condition' in column_name.lower():
-                post_conditions = preprocess_text(column_value)
-
-        extracted_requirements.append(summary)
-
-# Output JSON result
-print(json.dumps(extracted_requirements))
+text = extract_text(pdf_path)
+requirements = extract_requirements(text)
+print(json.dumps(requirements, indent=2))

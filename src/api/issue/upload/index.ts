@@ -30,24 +30,38 @@ const uploadFile: RequestHandler = (
 
       try {
         const parsedRequirements = JSON.parse(stdout)
-        // Initialize an array to store tasks
-        const tasks = []
-        const requirements = parsedRequirements.filter(
-          (requirement: string | null) => requirement !== '' && requirement !== null
-        )
-        console.log('requirements', requirements)
-        // Loop through each requirement and send it to the model one by one
-        for (let i = 0; i < requirements.length; i++) {
-          let requirement = requirements[i]
-          if (requirement !== null) {
-            const response = await axios.get(
-              `http://localhost:8000/api/v1/predict?text=${requirement}`
-            )
-            tasks.push({ requirement, tasks: response.data?.tasks?.map((task: any) => task.task) })
-          }
+
+        const { functional_requirements, non_functional_requirements } = parsedRequirements
+
+        const splitToRequirements = (text: string | string[]) => {
+          const cleaned = (Array.isArray(text) ? text.join(' ') : text)
+            .replace(/\u00A0/g, ' ')
+            .replace(/\s+/g, ' ')
+            .trim()
+
+          const split = cleaned
+            .split(/[.?!]\s+|\n+/)
+            .map((line) => line.trim())
+            .filter((line) => line.length > 0)
+
+          return split
         }
 
-        // Send the final response with all requirements and their tasks
+        const requirements = [
+          ...splitToRequirements(functional_requirements),
+          ...splitToRequirements(non_functional_requirements)
+        ]
+        const tasks = []
+        for (let i = 0; i < requirements.length; i++) {
+          const requirement = requirements[i]
+          const response = await axios.get(
+            `https://python.ugg-roleplay.com/taskapp/api/v1/predict?text=${encodeURIComponent(
+              requirement ?? ''
+            )}`
+          )
+          tasks.push({ requirement, tasks: response.data?.tasks?.map((task: any) => task.task) })
+        }
+
         res.json({ tasks })
         resolve()
       } catch (err) {
