@@ -5,4 +5,4 @@ pandas
 scikit-learn
 gdown
 nltk
-pdfminer
+pdfminer.six
